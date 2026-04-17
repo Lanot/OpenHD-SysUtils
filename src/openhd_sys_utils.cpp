@@ -387,6 +387,7 @@ int main(int argc, char* argv[]) {
     sysutil::mount_known_partitions();
     sysutil::sync_settings_from_files();
     sysutil::init_update_worker();
+    sysutil::init_wifi_info();
     sysutil::start_openhd_services_if_needed();
     sysutil::start_ground_video_if_needed();
 
@@ -394,8 +395,14 @@ int main(int argc, char* argv[]) {
     sysutil::init_debug_info();
     gDebug = gDebug || sysutil::debug_enabled();
     sysutil::apply_hostname_if_enabled();
-    sysutil::init_wifi_info();
     bool wifi_retry_active = !sysutil::has_openhd_wifibroadcast_cards();
+    std::size_t wifi_retry_attempt = 0;
+    if (wifi_retry_active) {
+        std::cerr << "[sysutils][wifi] No OpenHD-compatible card found after initial detection. "
+                  << "Will retry detection every 5 seconds." << std::endl;
+    } else {
+        std::cerr << "[sysutils][wifi] OpenHD-compatible Wi-Fi card detected." << std::endl;
+    }
     auto next_wifi_retry = std::chrono::steady_clock::now() +
                            std::chrono::seconds(5);
 
@@ -457,8 +464,15 @@ int main(int argc, char* argv[]) {
         if (wifi_retry_active) {
             const auto now = std::chrono::steady_clock::now();
             if (now >= next_wifi_retry) {
+                ++wifi_retry_attempt;
+                std::cerr << "[sysutils][wifi] Retry attempt #" << wifi_retry_attempt
+                          << " for OpenHD-compatible Wi-Fi card detection." << std::endl;
                 sysutil::refresh_wifi_info();
                 wifi_retry_active = !sysutil::has_openhd_wifibroadcast_cards();
+                if (!wifi_retry_active) {
+                    std::cerr << "[sysutils][wifi] OpenHD-compatible Wi-Fi card found on retry #"
+                              << wifi_retry_attempt << "." << std::endl;
+                }
                 next_wifi_retry = now + std::chrono::seconds(5);
             }
         }
